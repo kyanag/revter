@@ -7,10 +7,9 @@ use Kyanag\Revter\Core\Interfaces\HandlerInterface;
 use Kyanag\Revter\Core\Interfaces\ReadonlyQueueInterface;
 use Kyanag\Revter\Core\Runner;
 use Psr\Http\Message\RequestInterface;
-use Psr\Http\Message\ServerRequestInterface;
 
 /**
- * @implements HandlerInterface<array>
+ * @implements HandlerInterface<RequestInterface>
  */
 abstract class Revter implements HandlerInterface
 {
@@ -52,7 +51,7 @@ abstract class Revter implements HandlerInterface
 
     /**
      * @param string $pattern
-     * @param callable|HandlerInterface<ServerRequestInterface, array> $callable
+     * @param callable|HandlerInterface<RequestInterface, array> $callable
      * @param string $method
      * @return Route
      */
@@ -92,11 +91,15 @@ abstract class Revter implements HandlerInterface
     }
 
 
+    /**
+     * @param RequestInterface $request
+     * @return mixed|null
+     */
     public function handle($request)
     {
         try{
-            $method = $request['method'];
-            $path = parse_url($request['url'], PHP_URL_PATH);
+            $method = $request->getMethod();
+            $path = $request->getUri()->getPath();
             //有重写规 则使用重写规则
             if ($this->requestRewrite) {
                 list($method, $path) = call_user_func($this->requestRewrite, $request);
@@ -104,14 +107,15 @@ abstract class Revter implements HandlerInterface
             $route_result = $this->dispatcher->dispatch($method, $path);
             switch ($route_result[0]) {
                 case Dispatcher::FOUND:
-                    $psr_request = $this->createPsr7Request($request, [
-                        'method' => $method,
-                        'path' => $path,
-                    ]);
-
                     $handler = $route_result[1];
-                    $vars = $route_result[2];
-                    return $handler->handle($psr_request, $vars);
+
+                    $vars = array_replace([
+                        '@dispatch_var@' => [
+                            'method' => $method,
+                            'path' => $path,
+                        ],
+                    ], $route_result[2]);
+                    return $handler->handle($request, $vars);
                 default:
                     throw new RouteUnmatchedException();
             }
@@ -133,18 +137,10 @@ abstract class Revter implements HandlerInterface
     /**
      * 异常处理
      * @param \Throwable $e
-     * @param mixed $request
+     * @param RequestInterface $request
      * @param mixed $content
      * @return mixed
      */
     abstract protected function handleException(\Throwable $e, $request, $content = []);
 
-
-    /**
-     * 根据任务生成 RequestInterface
-     * @param $request
-     * @param array $dispatch_vars  用于路由的参数
-     * @return RequestInterface
-     */
-    abstract protected function createPsr7Request($request, array $dispatch_vars): RequestInterface;
 }
