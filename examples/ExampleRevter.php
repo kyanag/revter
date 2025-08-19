@@ -19,23 +19,21 @@ class ExampleRevter extends Revter
     }
 
     /**
-     * @param Exception $e
-     * @param array $task
+     * @param \Throwable $e
+     * @param array $request
      * @param mixed $content
      * @return void
      */
-    protected function handleException($e, $task, $content = [])
+    protected function handleException(\Throwable $e, $request, $content = [])
     {
-        echo "失败: {$task['request']['method']}:{$task['request']['url']}\n";
+        echo "失败: {$request['method']}:{$request['url']}\n";
         echo "Exception: [" . get_class($e) . "] {$e->getMessage()}\n";
         echo "\n\n";
     }
 
 
-    protected function createPsr7Request($task, array $dispatch_vars): \Psr\Http\Message\RequestInterface
+    protected function createPsr7Request($request, array $dispatch_vars): \Psr\Http\Message\RequestInterface
     {
-        $request = $task['request'];
-
         $psr_request = new ServerRequest(
             $request['method'],
             $request['url'],
@@ -43,7 +41,7 @@ class ExampleRevter extends Revter
             $request['body']
         );
         return $psr_request
-            ->withAttribute("_task", $task)
+            ->withAttribute("_task", $request)
             ->withAttribute("_dispatch_vars", $dispatch_vars);
 
     }

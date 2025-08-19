@@ -26,14 +26,10 @@ class Queue implements ReadonlyQueueInterface
     public function addUrl(string $url, string $method = 'GET')
     {
         $this->items[] = [
-            'request' => [
-                'method' => $method,
-                'url' => $url,
-                'headers' => [],
-                'body' => null
-            ],
-            'ttl' => 5,
-            'vars' => [],
+            'method' => $method,
+            'url' => $url,
+            'headers' => [],
+            'body' => null
         ];
     }
 }

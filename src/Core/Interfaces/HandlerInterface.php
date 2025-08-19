@@ -9,9 +9,9 @@ interface HandlerInterface
 {
 
     /**
-     * @param T $task
+     * @param T $request
      * @return mixed
      */
-    public function handle($task);
+    public function handle($request);
 
 }
