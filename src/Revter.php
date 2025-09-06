@@ -2,28 +2,28 @@
 
 namespace Kyanag\Revter;
 
+use ArrayObject;
 use FastRoute\Dispatcher;
 use Kyanag\Revter\Core\Interfaces\HandlerInterface;
 use Kyanag\Revter\Core\Interfaces\ReadonlyQueueInterface;
 use Kyanag\Revter\Core\Runner;
 use Psr\Http\Message\RequestInterface;
+use function FastRoute\simpleDispatcher;
 
 /**
- * @implements HandlerInterface<RequestInterface>
+ * <code>
+ *     
+ * </code>
  */
 abstract class Revter implements HandlerInterface
 {
+
+    use MiddlewareAbleTrait;
 
     /**
      * @var callable|null
      */
     protected $requestRewrite = null;
-
-    /**
-     * 路由 Dispatcher
-     * @var Dispatcher
-     */
-    protected $dispatcher = null;
 
 
     /**
@@ -33,9 +33,34 @@ abstract class Revter implements HandlerInterface
     protected $routeCollector;
 
 
+    /**
+     * @var CallableResolver
+     */
+    protected $callableResolver;
+
+
+    /** @var callable */
+    protected $invoker;
+
+    /**
+     * @var Dispatcher
+     */
+    protected $dispatcher;
+
+
     public function __construct()
     {
+        $this->callableResolver = new CallableResolver($this);
+
         $this->routeCollector = new RouteCollector();
+
+        $this->invoker = [$this, "handleRequest"];
+    }
+
+
+    public function useOwner($owner)
+    {
+        $this->callableResolver->setOwner($owner);
     }
 
 
@@ -55,7 +80,7 @@ abstract class Revter implements HandlerInterface
      * @param string $method
      * @return Route
      */
-    public function on(string $pattern, $callable, string $method = "GET"): Route
+    public function on(string $pattern, $callable, string $method = "GET")
     {
         return $this->routeCollector->addRoute($method, $pattern, $callable);
     }
@@ -66,37 +91,55 @@ abstract class Revter implements HandlerInterface
         $this->routeCollector->addGroup($prefix, $callback);
     }
 
-    /**
-     * 队列出队数据应符合以下规则
-     * <code>
-     *   struct RequestTaskInfo {
-     *      'request': {
-     *          'method': "GET",
-     *          'url': "",
-     *          'headers': [],
-     *          'body': "mixed"
-     *      },
-     *      'ttl': 5,
-     *      'vars': [],
-     *  }
-     *  ReadonlyQueueInterface<RequestTaskInfo>
-     * </code>
-     * @param ReadonlyQueueInterface $queue
-     * @return void
-     */
-    public function run(ReadonlyQueueInterface $queue)
-    {
-        $this->dispatcher = $this->routeCollector->toFastrouteDispatcher();
-        (new Runner($this, $queue))->run();
-    }
 
+    /**
+     * @param  $work
+     */
+    public function handle($work)
+    {
+        try{
+            $this->trigger("work.start", [
+                'work' => $work
+            ]);
+            $request = $this->createPsrRequest($work);
+            $res = call_user_func($this->invoker, $request);
+
+            $this->trigger("work.success", [
+                'work' => $work,
+                'request' => $request,
+                'res' => $res,
+            ]);
+            return $res;
+        }catch (\Throwable $exception){
+            $this->handleException($work, $exception);
+
+            $this->trigger("work.failed", [
+                'work' => $work,
+                'request' => $request ?? null,
+                'res' => $res ?? null,
+                'exception' => $exception,
+            ]);
+        } finally {
+            $this->trigger("work.end", [
+                'work' => $work,
+                'request' => $request ?? null,
+                'res' => $res ?? null,
+                'exception' => $exception ?? null,
+            ]);
+        }
+    }
 
     /**
      * @param RequestInterface $request
      * @return mixed|null
+     * @throws RouteUnmatchedException
+     * @throws \Throwable
      */
-    public function handle($request)
+    public function handleRequest(RequestInterface $request)
     {
+        $this->trigger("request.start", [
+            'request' => $request,
+        ]);
         try{
             $method = $request->getMethod();
             $path = $request->getUri()->getPath();
@@ -105,42 +148,123 @@ abstract class Revter implements HandlerInterface
                 list($method, $path) = call_user_func($this->requestRewrite, $request);
             }
             $route_result = $this->dispatcher->dispatch($method, $path);
+
+            $vars = [
+                '__dispatch_vars' => [
+                    'method' => $method,
+                    'path' => $path,
+                ],
+            ];
             switch ($route_result[0]) {
                 case Dispatcher::FOUND:
-                    $handler = $route_result[1];
+                    $route = $route_result[1];
 
-                    $vars = array_replace([
-                        '@dispatch_var@' => [
-                            'method' => $method,
-                            'path' => $path,
-                        ],
+                    $vars = array_replace($vars, [
+                        '__route' => $route,
                     ], $route_result[2]);
-                    return $handler->handle($request, $vars);
+                    $res = $this->invokeRoute($route, $request, $vars);
+
+                    $this->trigger("request.success", [
+                        'request' => $request,
+                        'vars' => $vars,
+                        'res' => $res,
+                    ]);
+
+                    return $res;
                 default:
-                    throw new RouteUnmatchedException();
+                    throw new RouteUnmatchedException($request, $vars);
             }
-        }catch (\Exception $e){
-            $this->handleException($e, $request, [$method, $path]);
+        } catch (\Throwable $exception){
+            $this->trigger("request.failed", [
+                'request' => $request,
+                'res' => $res ?? null,
+                'exception' => $exception,
+            ]);
+            throw $exception;
+        }finally {
+            $this->trigger("request.end", [
+                'request' => $request,
+                'vars' => $vars ?? null,
+                'res' => $res ?? null,
+            ]);
         }
-        return null;
     }
 
+
+    public function createRouteDispatcher()
+    {
+        $routes = $this->routeCollector->getRoutes();
+        $routes = array_map(function(Route $route){
+            $invoker = $route->getHandler();
+            $middlewares = $route->getMiddlewares();
+            $invoker = $this->callableResolver->createMiddlewareAbleInvoker($invoker, $middlewares);
+
+            //合并 Middleware 后，生成新的 Route
+            return new Route(
+                $route->getMethods(),
+                $route->getPattern(),
+                $invoker,
+                $route->getName()
+            );
+        }, $routes);
+
+        return simpleDispatcher(function (\FastRoute\RouteCollector $fast) use($routes){
+            /** @var Route $route */
+            foreach ($routes as $route){
+                $fast->addRoute($route->getMethods(), $route->getPattern(), $route);
+            }
+        });
+    }
+
+
+    public function run(ReadonlyQueueInterface $queue)
+    {
+        $handler = $this->createWorkHandler();
+        (new Runner($handler, $queue))->run();
+    }
+
+
+    protected function invokeRoute(Route $route, $request, $vars)
+    {
+        $handler = $route->getHandler();
+        return call_user_func_array($handler, [$request, $vars]);
+    }
+
+
     /**
-     * 触发事件
-     * @param string $name
-     * @param object $eventArgs
-     * @return mixed
+     * @return HandlerInterface
      */
-    abstract public function trigger(string $name, $eventArgs);
+    protected function createWorkHandler()
+    {
+        $this->dispatcher = $this->createRouteDispatcher();
+        $this->invoker = $this->callableResolver->createMiddlewareAbleInvoker([$this, "handleRequest"], $this->middlewares);
+
+        return $this;
+    }
+
+
+    /**
+     * 从队列任务中创建 psr7-RequestInterface
+     * @param $work
+     * @return RequestInterface
+     */
+    abstract public function createPsrRequest($work);
 
 
     /**
      * 异常处理
-     * @param \Throwable $e
-     * @param RequestInterface $request
-     * @param mixed $content
+     * @param $work
+     * @param \Throwable $exception
      * @return mixed
      */
-    abstract protected function handleException(\Throwable $e, $request, $content = []);
+    abstract public function handleException($work, \Throwable $exception);
 
+
+    /**
+     * 事件处理
+     * @param $name
+     * @param $args
+     * @return mixed
+     */
+    abstract public function trigger($name, $args = []);
 }

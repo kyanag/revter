@@ -4,8 +4,11 @@ namespace Kyanag\Revter;
 
 use Psr\Http\Message\ServerRequestInterface;
 
-class Route implements \ArrayAccess
+class Route
 {
+
+    use MiddlewareAbleTrait;
+
     /**
      * @var string|array
      */
@@ -16,90 +19,52 @@ class Route implements \ArrayAccess
      */
     protected $pattern;
 
-    /**
-     * @var callable
-     */
+
+    /** @var string|null  */
+    protected $name = "";
+
+
     protected $handler;
 
 
-    /** @var string|mixed|null  */
-    protected $id = "";
-
-
-    protected $middlewares = [];
-
-
-    public function __construct($method, $pattern, $handler, $id = null)
+    /**
+     * @param callable $handler
+     * @param $method
+     * @param string $pattern
+     * @param string|null $name
+     */
+    public function __construct($method, string $pattern, callable $handler, string $name = null)
     {
         $this->method = $method;
         $this->pattern = $pattern;
         $this->handler = $handler;
-        $this->id = $id;
+
+        $this->name = $name;
     }
 
 
     public function name($id)
     {
-        $this->id = $id;
+        $this->name = $id;
     }
 
-
-    public function middlewares($middlewares = [])
+    public function getMethods(): array
     {
-        $this->middlewares = $middlewares;
+        return (array)$this->method;
     }
 
-
-    public function handle(ServerRequestInterface $request, $var = [])
+    public function getPattern()
     {
-        return call_user_func_array($this->handler, [$request, $var]);
+        return $this->pattern;
     }
 
-
-    /**
-     * @param object $object
-     * @return bool
-     */
-    public function setOwner($object)
+    public function getHandler()
     {
-        if($this->handler instanceof \Closure && $object){
-            $this->handler = $this->handler->bindTo($object);
-            return true;
-        }
-        return false;
+        return $this->handler;
     }
 
-
-    /**
-     * @return array
-     */
-    public function toArray()
+    public function getName()
     {
-        return [
-            'method' => $this->method,
-            'pattern' => $this->pattern,
-            'handler' => $this->handler,
-            'id' => $this->id,
-        ];
-    }
-
-    public function offsetExists($offset)
-    {
-        return property_exists($this, $offset);
-    }
-
-    public function offsetGet($offset)
-    {
-        return $this->$offset;
-    }
-
-    public function offsetSet($offset, $value)
-    {
-        throw new \BadMethodCallException("Property offset is immutable.");
-    }
-
-    public function offsetUnset($offset)
-    {
-        throw new \BadMethodCallException("Property offset is immutable.");
+        return $this->name;
     }
 }

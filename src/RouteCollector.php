@@ -25,17 +25,17 @@ class RouteCollector
     protected $requestRewrite;
 
 
-    public function addRoute($method, $pattern, $handler)
+    public function addRoute($method, $pattern, $handler, $id = null)
     {
-        $route = $this->createRoute($method, $pattern, $handler);
+        $route = $this->createRoute($method, $pattern, $handler, $id);
         $this->routes[] = $route;
         return $route;
     }
 
 
-    public function on($pattern, $handler, $method = "GET")
+    public function on($pattern, $handler, $method = "GET", $id = null)
     {
-        $this->addRoute("GET", $pattern, $handler);
+        $this->addRoute("GET", $pattern, $handler, $id);
     }
 
 

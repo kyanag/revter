@@ -2,15 +2,21 @@
 
 namespace Kyanag\Revter;
 
+use Psr\Http\Message\RequestInterface;
 use Throwable;
 
 class RouteUnmatchedException extends \Exception
 {
 
-    public function __construct($message = "", $code = 0, Throwable $previous = null)
+    protected $request = null;
+
+    protected $vars = [];
+
+    public function __construct(RequestInterface $request, $vars, Throwable $previous = null)
     {
-        $message = "没有匹配的路由";
-        parent::__construct($message, $code, $previous);
+        $this->request = $request;
+        $this->vars = $vars;
+        parent::__construct("没有匹配的路由", 0, $previous);
     }
 
 }
