@@ -1,8 +1,6 @@
 <?php
 
-namespace Kyanag\Revter;
-
-use Psr\Http\Message\ServerRequestInterface;
+namespace Kyanag\Revter\Core;
 
 class Route
 {

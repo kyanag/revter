@@ -2,8 +2,8 @@
 
 namespace Kyanag\Revter\Core;
 
-use Kyanag\Revter\Core\Interfaces\ReadonlyQueueInterface;
 use Kyanag\Revter\Core\Interfaces\HandlerInterface;
+use Kyanag\Revter\Core\Interfaces\ReadonlyQueueInterface;
 
 /**
  *  @template T
@@ -17,7 +17,7 @@ final class Runner
 
 
     /**
-     * @var ReadonlyQueueInterface<T>
+     * @var \Kyanag\Revter\Core\Interfaces\ReadonlyQueueInterface<T>
      */
     protected $queue;
 

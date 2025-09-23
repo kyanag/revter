@@ -1,12 +1,10 @@
 <?php
 
-namespace Kyanag\Revter;
+namespace Kyanag\Revter\Core;
 
-use ArrayObject;
 use FastRoute\Dispatcher;
 use Kyanag\Revter\Core\Interfaces\HandlerInterface;
 use Kyanag\Revter\Core\Interfaces\ReadonlyQueueInterface;
-use Kyanag\Revter\Core\Runner;
 use Psr\Http\Message\RequestInterface;
 use function FastRoute\simpleDispatcher;
 
@@ -50,7 +48,7 @@ abstract class Revter implements HandlerInterface
 
     public function __construct()
     {
-        $this->callableResolver = new CallableResolver($this);
+        $this->callableResolver = new CallableResolver(null, $this);
 
         $this->routeCollector = new RouteCollector();
 

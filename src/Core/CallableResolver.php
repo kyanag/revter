@@ -1,9 +1,8 @@
 <?php
 
-namespace Kyanag\Revter;
+namespace Kyanag\Revter\Core;
 
-use Kyanag\Revter\Core\Interfaces\HandlerInterface;
-use SplObjectStorage;
+use DI\Container;
 
 class CallableResolver
 {
@@ -12,6 +11,12 @@ class CallableResolver
      * @var object?
      */
     protected $owner = null;
+
+
+    /**
+     * @var ?Container
+     */
+    protected $container = null;
 
 
     public function __construct($owner = null)

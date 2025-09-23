@@ -1,22 +1,8 @@
-# 反方向的路由
+<?php
 
-**Rev**erseRou**ter**，用写 Web 的方式写爬虫
+use Kyanag\Revter\Factory;
+use Kyanag\Revter\Libs\Html\Html;
 
-# 特点
-
-1. 用类似 Slim / Laravel 此类路由风格的方式写爬虫处理代码
-2. 支持路由中间件
-3. 支持全局中间件
-4. ⚠️除了 路由 和 PSR7 依赖，需自行实现 日志处理 / 事件处理 / 队列 / Http请求 等内容⚠️
-
-## Vars 参数详情
-
-1. __dispatch_vars
-
-
-### 代码见 [zhihu.php](./sites/zhihu.php)
-
-```php
 include __DIR__ . "/../vendor/autoload.php";
 
 //设置运行目录
@@ -24,12 +10,10 @@ $path = setcwd(runtime_path("zhihu"));
 
 $app = new \Kyanag\Revter\App();
 
-//jsonl 数据存储器
 $storage = Factory::makeDataStorage("jsonl", [
     'dir' => getcwd(),
 ]);
 
-//Http Client
 $client = new GuzzleHttp\Client([
     'base_uri' => 'https://www.zhihu.com/',
     'timeout'  => 5.0,
@@ -37,10 +21,10 @@ $client = new GuzzleHttp\Client([
     //'proxy' => "socks://127.0.0.1:10808",
 ]);
 
-//日志
 $logger = Factory::makeLogger("zhihu", "app.log", true);
 
-//全局中间件 - 延迟 1 秒
+
+//添加延迟
 $app->addMiddleware(function ($request, $next) use ($logger) {
     try {
         $res = $next($request);
@@ -51,24 +35,19 @@ $app->addMiddleware(function ($request, $next) use ($logger) {
     }
 });
 
-//全局中间件 - 日志
+//全局中间件
 $app->addMiddleware(function (\Psr\Http\Message\ServerRequestInterface $request, $next) use($client, $logger){
-    /** @var \Kyanag\Revter\App $this */
-
     $logger->info("任务 {$request->getMethod()}:{$request->getUri()} 开始");
     $logger->info("[App::Middleware@before] {$request->getMethod()}:{$request->getUri()}");
-    
-// 发送请求并注入到 request 中    
+
+// 发送请求并注入到 request 中
 //    $response = $client->send($request);
 //    $request = $request->withAttribute("response", $response);
-
     $res = $next($request);
     $logger->info("[App::Middleware@after] {$request->getMethod()}:{$request->getUri()}\n\n");
     return $res;
 });
 
-
-//添加路由
 $app->on("/question/{question_id}", function(\Psr\Http\Message\ServerRequestInterface $request, $vars = []) use($logger){
     //问题贴页面
     unset($vars['__route'], $vars['__dispatch_vars']);
@@ -97,7 +76,6 @@ $app->group("/people/{uid}", function(\Kyanag\Revter\Core\RouteCollector $collec
     });
 });
 
-//添加路由并添加路由中间件
 $app->on("/collection/{collection_id}", function(\Psr\Http\Message\ServerRequestInterface $request, $vars = []) use($logger){
     //收藏夹页
     unset($vars['__route'], $vars['__dispatch_vars']);
@@ -124,36 +102,4 @@ $queue->addUrl('https://www.zhihu.com/question/1936165649241076667');
 $queue->addUrl('https://zhuanlan.zhihu.com/p/676908347');
 $queue->addUrl('https://www.zhihu.com/collection/459061635');
 
-//运行
 $app->run($queue);
-
-```
-
-输出如下
-```txt
-[2025-09-23 14:29:26] INFO: 任务 GET:https://www.zhihu.com/collection/459061635 开始
-[2025-09-23 14:29:26] INFO: [App::Middleware@before] GET:https://www.zhihu.com/collection/459061635
-[2025-09-23 14:29:26] INFO: [Route::Middleware@before] collection_id = 459061635
-[2025-09-23 14:29:26] INFO: GET:https://www.zhihu.com/collection/459061635
-        collection_id = 459061635
-        vars = array (
-          'collection_id' => '459061635',
-        )
-[2025-09-23 14:29:26] INFO: [Route::Middleware@after] collection_id = 459061635
-[2025-09-23 14:29:27] INFO: [App::Middleware@after] GET:https://www.zhihu.com/collection/459061635
-
-
-[2025-09-23 14:29:27] INFO: 任务 GET:https://zhuanlan.zhihu.com/p/676908347 开始
-[2025-09-23 14:29:27] INFO: [App::Middleware@before] GET:https://zhuanlan.zhihu.com/p/676908347
-[2025-09-23 14:29:27] INFO: [App::Middleware@after] GET:https://zhuanlan.zhihu.com/p/676908347
-
-
-[2025-09-23 14:29:27] INFO: 任务 GET:https://www.zhihu.com/question/1936165649241076667 开始
-[2025-09-23 14:29:27] INFO: [App::Middleware@before] GET:https://www.zhihu.com/question/1936165649241076667
-[2025-09-23 14:29:27] INFO: GET:https://www.zhihu.com/question/1936165649241076667
-        question_id = 1936165649241076667
-        vars = array (
-          'question_id' => '1936165649241076667',
-        )
-[2025-09-23 14:29:28] INFO: [App::Middleware@after] GET:https://www.zhihu.com/question/1936165649241076667
-```

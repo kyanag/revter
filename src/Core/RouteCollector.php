@@ -1,9 +1,8 @@
 <?php
 
-namespace Kyanag\Revter;
+namespace Kyanag\Revter\Core;
 
 use FastRoute\Dispatcher;
-use Kyanag\Revter\Route;
 use function FastRoute\simpleDispatcher;
 
 class RouteCollector
